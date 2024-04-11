@@ -1,3 +1,5 @@
+# Authored by Seth Canada
+
 import pyshark
 from joblib import load
 import numpy as np
@@ -13,27 +15,31 @@ predicted_labels = []  # To store the predicted label of each packet
 def extract_features(packet):
     features = []
 
-    # Feature 1: Packet Length
-    packet_length = int(packet.length)
-    features.append(packet_length)
+    # Direct observations or calculations based on the packet
+    features.append(packet.duration)  # 1. Duration
+    features.append(1 if packet.protocol_type == 'TCP' else 2 if packet.protocol_type == 'UDP' else 0)  # 2. Protocol_type
+    features.append(packet.service)  # 3. Service (You'll need a mapping from service to integers)
+    features.append(packet.flag)  # 4. Flag (Similarly, you'll need a mapping from flag status to integers)
+    features.append(packet.src_bytes)  # 5. Src_bytes
+    features.append(packet.dst_bytes)  # 6. Dst_bytes
+    features.append(1 if packet.land else 0)  # 7. Land
+    features.append(packet.wrong_fragment)  # 8. Wrong_fragment
+    features.append(packet.urgent)  # 9. Urgent
 
-    # Feature 2: Protocol Type (1 for TCP, 2 for UDP, 0 for others)
-    if 'TCP' in packet:
-        protocol_type = 1
-    elif 'UDP' in packet:
-        protocol_type = 2
-    else:
-        protocol_type = 0
-    features.append(protocol_type)
+    # Placeholder values for content-related features
+    # You might need custom logic to extract these based on packet content
+    features.extend([0] * 13)  # 10. Hot to 22. Is_guest_login
 
-    # Features 3 & 4: Source and Destination Ports (set to 0 for non-TCP/UDP packets)
-    src_port = dst_port = 0
-    if protocol_type in [1, 2]:  # Check if TCP or UDP
-        src_port = int(packet[packet.transport_layer].srcport)
-        dst_port = int(packet[packet.transport_layer].dstport)
-    features.extend([src_port, dst_port])  # Add src and dst ports to the features list
+    # Placeholder values for time-related features
+    # Actual implementation should calculate these based on connection history
+    features.extend([0] * 9)  # 23. Count to 31. Srv_diff_host_rate
+
+    # Placeholder values for host-based traffic features
+    # Similar to time-related, these require historical data analysis
+    features.extend([0] * 11)  # 32. Dst_host_count to 42. Dst_host_srv_rerror_rate
 
     return features
+
 
 def determine_anomaly_type(features):
     # Simplified heuristics to determine anomaly type based on static packet features
@@ -65,7 +71,7 @@ def log_anomaly(packet_info, anomaly_description):
 # Load your pre-trained model and scaler
 model = load('isolation_forest_model.joblib')
 scaler = load('scaler.joblib')
-
+print(type(scaler))
 def analyze_packet(packet):
     features = extract_features(packet)
     features_scaled = scaler.transform([features])
@@ -107,7 +113,7 @@ def analyze_packet(packet):
     true_labels.append(true_label)  # Assuming you have a way to set true_label for each packet
         
 def capture_packets():
-    capture = pyshark.LiveCapture(interface='Adapter for loopback traffic capture', display_filter='ip.addr==127.0.0.1')
+    capture = pyshark.LiveCapture(interface='loopback', display_filter='ip.addr==127.0.0.1')
     for packet in capture.sniff_continuously(packet_count=50):  # Adjust as needed
         print('Just captured a packet:', packet)
         analyze_packet(packet=packet)

@@ -1,3 +1,5 @@
+# Authored by Seth Canada
+
 import socket
 import numpy as np
 from joblib import load

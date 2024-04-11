@@ -1,3 +1,5 @@
+# Authored by Seth Canada
+
 import random
 import pandas as pd
 import time

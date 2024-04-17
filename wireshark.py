@@ -13,6 +13,7 @@ true_labels = []  # To store the true label of each packet (1 for normal, -1 for
 predicted_labels = []  # To store the predicted label of each packet
 
 def extract_features(packet):
+    print(packet)
     features = []
 
     # Direct observations or calculations based on the packet
@@ -25,7 +26,40 @@ def extract_features(packet):
     features.append(1 if packet.land else 0)  # 7. Land
     features.append(packet.wrong_fragment)  # 8. Wrong_fragment
     features.append(packet.urgent)  # 9. Urgent
-
+    features.append(packet.hot)
+    features.append(packet.num_failed_logins)    
+    features.append(packet.logged_in)
+    features.append(packet.num_compromised)
+    features.append(packet.root_shell)
+    features.append(packet.su_attempted)
+    features.append(packet.num_root)
+    features.append(packet.num_file_creations)
+    features.append(packet.num_shells)
+    features.append(packet.num_access_files)
+    features.append(packet.num_outbound_cmds)
+    features.append(packet.is_host_login)
+    features.append(packet.is_guest_login)
+    features.append(packet.count)
+    features.append(packet.srv_count)
+    features.append(packet.serror_rate)
+    features.append(packet.srv_serror_rate)
+    features.append(packet.rerror_rate)
+    features.append(packet.srv_rerror_rate)
+    features.append(packet.same_srv_rate)
+    features.append(packet.diff_srv_rate)
+    features.append(packet.srv_diff_host_rate)
+    features.append(packet.dst_host_count)
+    features.append(packet.dst_host_srv_count)
+    features.append(packet.dst_host_same_srv_rate)
+    features.append(packet.dst_host_diff_srv_rate)
+    features.append(packet.dst_host_same_src_port_rate)
+    features.append(packet.dst_host_srv_diff_host_rate)
+    features.append(packet.dst_host_serror_rate)
+    features.append(packet.dst_host_srv_serror_rate)
+    features.append(packet.dst_host_rerror_rate)
+    features.append(packet.dst_host_srv_rerror_rate)
+    features.append(packet.attack)
+    features.append(packet.last_flag)
     # Placeholder values for content-related features
     # You might need custom logic to extract these based on packet content
     features.extend([0] * 13)  # 10. Hot to 22. Is_guest_login
@@ -113,8 +147,9 @@ def analyze_packet(packet):
     true_labels.append(true_label)  # Assuming you have a way to set true_label for each packet
         
 def capture_packets():
-    capture = pyshark.LiveCapture(interface='loopback', display_filter='ip.addr==127.0.0.1')
+    capture = pyshark.LiveCapture(interface='Adapter for loopback traffic capture', display_filter='ip.addr==127.0.0.1')
     for packet in capture.sniff_continuously(packet_count=50):  # Adjust as needed
+        
         print('Just captured a packet:', packet)
         analyze_packet(packet=packet)
 

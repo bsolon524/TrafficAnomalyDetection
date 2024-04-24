@@ -31,14 +31,14 @@ preprocessor = ColumnTransformer(
     remainder='passthrough')
 
 # Define the IsolationForest model
-model = IsolationForest(n_estimators=100000, random_state=42, contamination='auto')
+model = IsolationForest(n_estimators=1000000, random_state=42, contamination='auto')
 
 # Create a pipeline that combines preprocessing with the model
 pipeline = Pipeline([
     ('preprocessor', preprocessor),
     ('model', model)
 ])
-preprocessor.fit(X)
+preprocessor.fit_transform(X)
 X_transformed = preprocessor.transform(X)
 print(X_transformed.shape)
 # Fit the model

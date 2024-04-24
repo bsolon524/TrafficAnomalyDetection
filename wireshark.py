@@ -1,6 +1,7 @@
 # Authored by Seth Canada
 
 import pyshark
+import time
 from joblib import load
 import numpy as np
 import json
@@ -26,85 +27,98 @@ feature_names = [
 def extract_features(packet):
     features = []
     try:
-        raw_data = str(packet.udp.payload, 'utf-8')
-        print("Raw payload data:", raw_data)
+        raw_data = packet.udp.payload.replace(':', '')
+        raw_payload = bytes.fromhex(raw_data)
+        decoded_payload = raw_payload.decode("utf-8", errors='ignore')
+        print("")
+        print(decoded_payload)
     except AttributeError as e:
         print("Failed to access TCP payload:", e)
 
     try:
-        payload = str(packet.udp.payload, 'utf-8')  # Assuming the payload is in the tcp layer
-        data = json.loads(payload)  # Parse JSON payload
-        features = [data.get(feature, 0) for feature in feature_names]
-        if not features:
-            print("No features extracted. Data might be empty or malformed:", data)
-    except (json.JSONDecodeError, AttributeError) as e:
-        print("Failed to decode JSON or access TCP payload:", e)
-    except Exception as e:
-        print("An unexpected error occurred:", e)
+        # Convert JSON string back to a dictionary
+        start_index = decoded_payload.find('{')
+        if start_index != -1:
+            sliced = decoded_payload[start_index:]
+        else:
+            print("No curly brace found")
+        data = json.loads(sliced)
+        print("")
+        print(data)
+    except json.JSONDecodeError:
+        print("Error decoding JSON from payload")
+        data = {}
+    # try:
+    #     payload = packet.udp.payload  # Assuming the payload is in the tcp layer
+    #     data = json.loads(payload)  # Parse JSON payload
+    #     features = [data.get(feature, 0) for feature in feature_names]
+    #     if not features:
+    #         print("No features extracted. Data might be empty or malformed:", data)
+    # except (json.JSONDecodeError, AttributeError) as e:
+    #     print("Failed to decode JSON or access TCP payload:", e)
+    # except Exception as e:
+    #     print("An unexpected error occurred:", e)
     
-    # # Basic features
-    # features.append(float(getattr(packet, 'duration', 0)))  # Convert duration to float for consistency
-    
-    # # Encode protocol_type as integers (TCP: 1, UDP: 2, Others: 0)
-    # protocol_map = {'TCP': 1, 'UDP': 2}  # Add other protocols as necessary
-    # protocol_type = protocol_map.get(getattr(packet, 'protocol_type', '').upper(), 0)
-    # features.append(protocol_type)
-    
-    # # Encode service and flag using predefined mappings if many unique values
-    # service_map = {'http': 1, 'ftp': 2, 'smtp': 3, 'telnet': 4, 'unknown': 0}  # Extend as needed
-    # flag_map = {'SF': 1, 'S0': 2, 'REJ': 3, 'RST': 4, 'unknown': 0}  # Extend as needed
-    
-    # features.append(service_map.get(getattr(packet, 'service', 'unknown'), 0))
-    # features.append(flag_map.get(getattr(packet, 'flag', 'unknown'), 0))
-    
-    # # Continue for other direct observable features, ensuring all are numerically encoded
-    # features.append(int(getattr(packet, 'src_bytes', 0)))
-    # features.append(int(getattr(packet, 'dst_bytes', 0)))
-    # features.append(1 if getattr(packet, 'land', False) else 0)
-    # features.append(int(getattr(packet, 'wrong_fragment', 0)))
-    # features.append(int(getattr(packet, 'urgent', 0)))
-    
-    # # Continue adding other features as integers or floats as appropriate
-    # features.extend([
-    #     int(getattr(packet, 'hot', 0)),
-    #     int(getattr(packet, 'num_failed_logins', 0)),
-    #     int(getattr(packet, 'logged_in', 0)),
-    #     int(getattr(packet, 'num_compromised', 0)),
-    #     int(getattr(packet, 'root_shell', 0)),
-    #     int(getattr(packet, 'su_attempted', 0)),
-    #     int(getattr(packet, 'num_root', 0)),
-    #     int(getattr(packet, 'num_file_creations', 0)),
-    #     int(getattr(packet, 'num_shells', 0)),
-    #     int(getattr(packet, 'num_access_files', 0)),
-    #     int(getattr(packet, 'num_outbound_cmds', 0)),
-    #     int(getattr(packet, 'is_host_login', 0)),
-    #     int(getattr(packet, 'is_guest_login', 0))
-    # ])
+    # Mappings
+    protocol_map = {'TCP': 1, 'UDP': 2}  # Extend this as needed
+    service_map = {'http': 1, 'ftp': 2, 'smtp': 3, 'telnet': 4, 'unknown': 0}
+    flag_map = {'SF': 1, 'S0': 2, 'REJ': 3, 'RST': 4, 'unknown': 0}
+    if data:
+        # Extract and map features
+        features.append(float(data.get('duration', 0)))
+        features.append(protocol_map.get(data.get('protocol_type', '').upper(), 0))
+        features.append(service_map.get(data.get('service', 'unknown'), 0))
+        features.append(flag_map.get(data.get('flag', 'unknown'), 0))
 
-    # # For traffic and host-based traffic features, ensure all numeric types are consistent
-    # features.extend([
-    #     int(getattr(packet, 'count', 0)),
-    #     int(getattr(packet, 'srv_count', 0)),
-    #     float(getattr(packet, 'serror_rate', 0.0)),
-    #     float(getattr(packet, 'srv_serror_rate', 0.0)),
-    #     float(getattr(packet, 'rerror_rate', 0.0)),
-    #     float(getattr(packet, 'srv_rerror_rate', 0.0)),
-    #     float(getattr(packet, 'same_srv_rate', 0.0)),
-    #     float(getattr(packet, 'diff_srv_rate', 0.0)),
-    #     float(getattr(packet, 'srv_diff_host_rate', 0.0)),
-    #     int(getattr(packet, 'dst_host_count', 0)),
-    #     int(getattr(packet, 'dst_host_srv_count', 0)),
-    #     float(getattr(packet, 'dst_host_same_srv_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_diff_srv_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_same_src_port_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_srv_diff_host_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_serror_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_srv_serror_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_rerror_rate', 0.0)),
-    #     float(getattr(packet, 'dst_host_srv_rerror_rate', 0.0))
-    # ])
+        # Direct observable features
+        features.append(int(data.get('src_bytes', 0)))
+        features.append(int(data.get('dst_bytes', 0)))
+        features.append(1 if data.get('land', False) else 0)
+        features.append(int(data.get('wrong_fragment', 0)))
+        features.append(int(data.get('urgent', 0)))
 
-    return features
+        # Additional features
+        features.append(int(data.get('hot', 0)))
+        features.append(int(data.get('num_failed_logins', 0)))
+        features.append(1 if data.get('logged_in', False) else 0)
+        features.append(int(data.get('num_compromised', 0)))
+        features.append(1 if data.get('root_shell', False) else 0)
+        features.append(1 if data.get('su_attempted', False) else 0)
+        features.append(int(data.get('num_root', 0)))
+        features.append(int(data.get('num_file_creations', 0)))
+        features.append(int(data.get('num_shells', 0)))
+        features.append(int(data.get('num_access_files', 0)))
+        features.append(int(data.get('num_outbound_cmds', 0)))
+        features.append(1 if data.get('is_host_login', False) else 0)
+        features.append(1 if data.get('is_guest_login', False) else 0)
+
+        # Traffic features
+        features.append(int(data.get('count', 0)))
+        features.append(int(data.get('srv_count', 0)))
+        features.append(float(data.get('serror_rate', 0.0)))
+        features.append(float(data.get('srv_serror_rate', 0.0)))
+        features.append(float(data.get('rerror_rate', 0.0)))
+        features.append(float(data.get('srv_rerror_rate', 0.0)))
+        features.append(float(data.get('same_srv_rate', 0.0)))
+        features.append(float(data.get('diff_srv_rate', 0.0)))
+        features.append(float(data.get('srv_diff_host_rate', 0.0)))
+
+        # Host-based traffic features
+        features.append(int(data.get('dst_host_count', 0)))
+        features.append(int(data.get('dst_host_srv_count', 0)))
+        features.append(float(data.get('dst_host_same_srv_rate', 0.0)))
+        features.append(float(data.get('dst_host_diff_srv_rate', 0.0)))
+        features.append(float(data.get('dst_host_same_src_port_rate', 0.0)))
+        features.append(float(data.get('dst_host_srv_diff_host_rate', 0.0)))
+        features.append(float(data.get('dst_host_serror_rate', 0.0)))
+        features.append(float(data.get('dst_host_srv_serror_rate', 0.0)))
+        features.append(float(data.get('dst_host_rerror_rate', 0.0)))
+        features.append(float(data.get('dst_host_srv_rerror_rate', 0.0)))
+
+        return features
+    else:
+        print("No data available")
+        return []
 
 
 def determine_anomaly_type(features):
@@ -212,73 +226,88 @@ def log_anomaly(packet_info, anomaly_description):
 # Load your pre-trained model and scaler
 model = load('isolation_forest_pipeline.joblib')
 scaler = load('scaler.joblib')
-def analyze_packet(packet):
-    features = extract_features(packet)  # Ensure this function is properly defined to return the features as a list
+def analyze_packet():
+    try:
+        with open('test.json', 'r') as f:
+            predictions = []
+            test = []
+            for line in f:
+                features_data = json.loads(line)
+                # Assume you have a function to convert dict to the required numpy array format
+                test.append(features_data)
+                features = np.array(test)
+                scaled_features = scaler.transform(features)
+                prediction = model.predict(scaled_features)[0]
+                print(prediction)
+                predictions.append(prediction)
+    except FileNotFoundError:
+        print("File not found")
+    # Ensure this function is properly defined to return the features as a list
     # print(features)
     # print("")
     # print([item for item in features])
     # features = np.array(features)
     # features = features.reshape(1, -1)
-    features_scaled = scaler.transform([features])  # Scale the features before prediction
-    print(features_scaled)
-    prediction = model.predict(features_scaled)[0]  # Predict using the scaled features
-
+    # features_scaled = scaler.transform([features])  # Scale the features before prediction
+    # # print(features_scaled)
+    # prediction = model.predict(features_scaled)[0]  # Predict using the scaled features
+    # print(prediction)
     # Initialize lists for logging (make sure these are defined outside this function if they need to be accessed later)
     packet_features, predicted_labels, true_labels = [], [], []
 
     if prediction == -1:
         true_label = -1
-        print(f"Anomaly detected: {packet}")
+        # print(f"Anomaly detected: {packet}")
 
-        anomaly_type = determine_anomaly_type(features)  # Use the comprehensive check for anomalies
+        # anomaly_type = determine_anomaly_type(features)  # Use the comprehensive check for anomalies
 
-        # Collect packet info for logging
-        packet_info = {
-            'timestamp': datetime.now().isoformat(),
-            'highest_layer': packet.highest_layer,
-            'length': packet.length,
-            'anomaly_type': anomaly_type  # Include anomaly type in the logged information
-        }
+        # # Collect packet info for logging
+        # packet_info = {
+        #     'timestamp': datetime.now().isoformat(),
+        #     'highest_layer': packet.highest_layer,
+        #     'length': packet.length,
+        #     'anomaly_type': anomaly_type  # Include anomaly type in the logged information
+        # }
 
-        # Add IP and port information if available
-        if hasattr(packet, 'ip'):
-            packet_info.update({
-                'src_ip': packet.ip.src,
-                'dst_ip': packet.ip.dst,
-            })
-        if hasattr(packet, packet.transport_layer):
-            layer = getattr(packet, packet.transport_layer.lower(), None)
-            if layer:
-                packet_info.update({
-                    'src_port': layer.srcport,
-                    'dst_port': layer.dstport,
-                })
+        # # Add IP and port information if available
+        # if hasattr(packet, 'ip'):
+        #     packet_info.update({
+        #         'src_ip': packet.ip.src,
+        #         'dst_ip': packet.ip.dst,
+        #     })
+        # if hasattr(packet, packet.transport_layer):
+        #     layer = getattr(packet, packet.transport_layer.lower(), None)
+        #     if layer:
+        #         packet_info.update({
+        #             'src_port': layer.srcport,
+        #             'dst_port': layer.dstport,
+        #         })
 
-        log_anomaly(packet_info, anomaly_description=anomaly_type)  # Assume a function to log anomalies is defined
+        # log_anomaly(packet_info, anomaly_description=anomaly_type)  # Assume a function to log anomalies is defined
     else:
         true_label = 1
         # print(f"Normal traffic: {packet}")
 
     # Append data to your lists for further analysis or logging
-    packet_features.append(features)
+    # packet_features.append(features_dict)
     predicted_labels.append(prediction)
     true_labels.append(true_label)  # Assuming you have a way to set true_label for each packet
 
     # This function now fully integrates anomaly detection
 def capture_packets():
-    capture = pyshark.LiveCapture(interface='Loopback', display_filter='ip.addr==udp')
-    for packet in capture.sniff_continuously(packet_count=50):
-        with open('packet_info.json', 'a') as f:
-            json.dump(packet, f, indent=4)
-        try:
-            # If payload data extraction is needed:
-            if hasattr(packet.udp, 'payload'):
-                payload_data = packet.udp.payload
-                print("Payload data:", payload_data)
-        except AttributeError as e:
-            print("Error accessing packet data:", e)
-        # print('Just captured a packet:', packet)
-        analyze_packet(packet=packet)
+    capture = pyshark.LiveCapture(interface='Loopback', display_filter='udp', include_raw=True, use_json=True)
+    with open('test.json', 'w') as f:
+        for packet in capture.sniff_continuously(packet_count=50):
+            try:
+                features = extract_features(packet)
+                f.write(json.dumps(features) + '\n')
+            except Exception as e:
+                print(f"Failed to extract features: {e}")
+            # analyze_packet(packet=packet)
+
+    time.sleep(20)
+
+    analyze_packet()
 
     # Evaluate metrics
     accuracy = accuracy_score(true_labels, predicted_labels)
